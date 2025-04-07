@@ -1,20 +1,220 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-generator client {
-    provider = "prisma-client-js"
-}
 
+// This is the Prisma schema for the Brandis database
+
+// Set the datasource for PostgreSQL
 datasource db {
     provider = "postgresql"
     url      = env("DATABASE_URL")
+    directUrl = env("DIRECT_URL")
 }
 
-model Post {
-    id        Int      @id @default(autoincrement())
-    name      String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+// Set the generator
+generator client {
+  provider = "prisma-client-js"
+}
 
-    @@index([name])
+// Enum types
+enum PeranPengguna {
+  Admin_Produksi
+  Admin_Gudang
+  Bendahara
+  Pemasaran
+  Pimpinan
+}
+
+enum StatusPembayaran {
+  Lunas
+  Menunggu
+  Jatuh_Tempo
+}
+
+// Define the models for your database tables
+model Pengguna {
+  auth_id       String         @id @unique // Primary key from Supabase auth.users.id
+  nama          String
+  email         String         @unique
+  peran         PeranPengguna
+  last_seen     DateTime?      @map("last_seen") // Track when user was last active
+  sessions      Session[]      // Relation to user sessions
+  created_at    DateTime       @default(now()) @map("created_at")
+  updated_at    DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  @@map("pengguna")
+}
+
+model Session {
+  id            String         @id @default(uuid())
+  pengguna_id   String         @map("pengguna_id") // Reference to auth_id in Pengguna
+  user_agent    String?        @map("user_agent") // Browser/device info
+  ip_address    String?        @map("ip_address") // User's IP address
+  expires_at    DateTime       @map("expires_at") // When the session expires
+  created_at    DateTime       @default(now()) @map("created_at")
+  last_active   DateTime       @default(now()) @map("last_active")
+  pengguna      Pengguna       @relation(fields: [pengguna_id], references: [auth_id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Produk {
+  id          Int            @id @default(autoincrement())
+  nama        String
+  kategori    String?
+  komposisi   String?
+  deskripsi   String?
+  harga       Decimal        @db.Decimal(10, 2)
+  gambarProduk GambarProduk[]
+  batch       Batch[]
+
+  @@map("produk")
+}
+
+model GambarProduk {
+  id              Int      @id @default(autoincrement())
+  produkId        Int      @map("produk_id")
+  urlGambar       String   @map("url_gambar")
+  idPublikGambar  String   @map("id_publik_gambar")
+  namaFileGambar  String?  @map("nama_file_gambar")
+  utama           Boolean  @default(false)
+  diunggahPada    DateTime @default(now()) @map("diunggah_pada")
+  produk          Produk   @relation(fields: [produkId], references: [id], onDelete: Cascade)
+
+  @@map("gambar_produk")
+}
+
+model Batch {
+  id                Int                 @id @default(autoincrement())
+  nama              String
+  produkId          Int                 @map("produk_id")
+  kuantitas         Int
+  tanggalKadaluarsa DateTime            @map("tanggal_kadaluarsa")
+  dibuatPada        DateTime            @default(now()) @map("dibuat_pada")
+  diperbaruiPada    DateTime            @default(now()) @updatedAt @map("diperbarui_pada")
+  produk            Produk              @relation(fields: [produkId], references: [id])
+  stokOutlet        StokOutlet[]
+  detailDistribusi  DetailDistribusi[]
+  detailPenjualan   DetailPenjualan[]
+  detailPengembalian DetailPengembalian[]
+
+  @@map("batch")
+}
+
+model Outlet {
+  id            Int            @id @default(autoincrement())
+  nama          String
+  alamat        String
+  nomorTelepon  String?        @map("nomor_telepon")
+  dibuatPada    DateTime       @default(now()) @map("dibuat_pada")
+  stokOutlet    StokOutlet[]
+  distribusi    Distribusi[]
+  penjualan     Penjualan[]
+  pengembalian  Pengembalian[]
+
+  @@map("outlet")
+}
+
+model StokOutlet {
+  id            Int      @id @default(autoincrement())
+  outletId      Int      @map("outlet_id")
+  batchId       Int      @map("batch_id")
+  kuantitas     Int
+  dibuatPada    DateTime @default(now()) @map("dibuat_pada")
+  diperbaruiPada DateTime @default(now()) @updatedAt @map("diperbarui_pada")
+  outlet        Outlet   @relation(fields: [outletId], references: [id])
+  batch         Batch    @relation(fields: [batchId], references: [id])
+
+  @@map("stok_outlet")
+}
+
+model Distribusi {
+  id               Int                @id @default(autoincrement())
+  outletId         Int                @map("outlet_id")
+  dibuatPada       DateTime           @default(now()) @map("dibuat_pada")
+  diperbaruiPada   DateTime           @default(now()) @updatedAt @map("diperbarui_pada")
+  outlet           Outlet             @relation(fields: [outletId], references: [id])
+  detailDistribusi DetailDistribusi[]
+
+  @@map("distribusi")
+}
+
+model DetailDistribusi {
+  id              Int        @id @default(autoincrement())
+  distribusiId    Int        @map("distribusi_id")
+  batchId         Int        @map("batch_id")
+  kuantitasTerjual Int       @map("kuantitas_terjual")
+  dibuatPada      DateTime   @default(now()) @map("dibuat_pada")
+  diperbaruiPada  DateTime   @default(now()) @updatedAt @map("diperbarui_pada")
+  distribusi      Distribusi @relation(fields: [distribusiId], references: [id])
+  batch           Batch      @relation(fields: [batchId], references: [id])
+
+  @@map("detail_distribusi")
+}
+
+model Penjualan {
+  id              Int               @id @default(autoincrement())
+  outletId        Int               @map("outlet_id")
+  dibuatPada      DateTime          @default(now()) @map("dibuat_pada")
+  diperbaruiPada  DateTime          @default(now()) @updatedAt @map("diperbarui_pada")
+  outlet          Outlet            @relation(fields: [outletId], references: [id])
+  detailPenjualan DetailPenjualan[]
+  faktur          Faktur[]
+
+  @@map("penjualan")
+}
+
+model DetailPenjualan {
+  id              Int       @id @default(autoincrement())
+  penjualanId     Int       @map("penjualan_id")
+  batchId         Int       @map("batch_id")
+  kuantitasTerjual Int      @map("kuantitas_terjual")
+  dibuatPada      DateTime  @default(now()) @map("dibuat_pada")
+  diperbaruiPada  DateTime  @default(now()) @updatedAt @map("diperbarui_pada")
+  penjualan       Penjualan @relation(fields: [penjualanId], references: [id])
+  batch           Batch     @relation(fields: [batchId], references: [id])
+
+  @@map("detail_penjualan")
+}
+
+model Faktur {
+  id                Int              @id @default(autoincrement())
+  penjualanId       Int              @map("penjualan_id")
+  nomorFaktur       String           @unique @map("nomor_faktur")
+  statusPembayaran  StatusPembayaran @map("status_pembayaran")
+  tanggalFaktur     DateTime         @map("tanggal_faktur")
+  tanggalJatuhTempo DateTime         @map("tanggal_jatuh_tempo")
+  jumlahTagihan     Decimal          @db.Decimal(10, 2) @map("jumlah_tagihan")
+  jumlahDibayar     Decimal          @default(0) @db.Decimal(10, 2) @map("jumlah_dibayar")
+  dibuatPada        DateTime         @default(now()) @map("dibuat_pada")
+  diperbaruiPada    DateTime         @default(now()) @updatedAt @map("diperbarui_pada")
+  penjualan         Penjualan        @relation(fields: [penjualanId], references: [id])
+
+  @@map("faktur")
+}
+
+model Pengembalian {
+  id                 Int                  @id @default(autoincrement())
+  outletId           Int                  @map("outlet_id")
+  tanggalPengembalian DateTime            @default(now()) @map("tanggal_pengembalian")
+  dibuatPada         DateTime             @default(now()) @map("dibuat_pada")
+  diperbaruiPada     DateTime             @default(now()) @updatedAt @map("diperbarui_pada")
+  outlet             Outlet               @relation(fields: [outletId], references: [id])
+  detailPengembalian DetailPengembalian[]
+
+  @@map("pengembalian")
+}
+
+model DetailPengembalian {
+  id              Int          @id @default(autoincrement())
+  pengembalianId  Int          @map("pengembalian_id")
+  batchId         Int          @map("batch_id")
+  kuantitas       Int
+  alasan          String?
+  dibuatPada      DateTime     @default(now()) @map("dibuat_pada")
+  diperbaruiPada  DateTime     @default(now()) @updatedAt @map("diperbarui_pada")
+  pengembalian    Pengembalian @relation(fields: [pengembalianId], references: [id])
+  batch           Batch        @relation(fields: [batchId], references: [id])
+
+  @@map("detail_pengembalian")
 }
