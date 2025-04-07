@@ -1,3 +1,4 @@
+// lib/supabase/authErrorCodes.ts
 export enum SupabaseAuthErrorCode {
   anonymous_provider_disabled = "anonymous_provider_disabled",
   bad_code_verifier = "bad_code_verifier",

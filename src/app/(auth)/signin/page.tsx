@@ -1,59 +1,54 @@
+// app/(auth)/signin/page.tsx
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { authService } from "~/lib/services/auth";
 import { AlertCircle } from "lucide-react";
-
-const signInSchema = z.object({
-  email: z.string().email("Email tidak valid"),
-  password: z.string().min(6, "Password minimal 6 karakter"),
-});
-
-type SignInFormValues = z.infer<typeof signInSchema>;
+import { signIn } from "~/app/actions/auth";
 
 export default function SignInPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
 
-  // Initialize form
-  const form = useForm<SignInFormValues>({
-    resolver: zodResolver(signInSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
-  });
-
-  const onSubmit = async (data: SignInFormValues) => {
+  const handleSubmit = async (formData: FormData) => {
     setIsLoading(true);
     setError(null);
+    setFormErrors({});
 
     try {
-      // Get user agent and IP for session tracking
+      // Get form values
+      const email = formData.get("email") as string;
+      const password = formData.get("password") as string;
+
+      // Get user agent for session tracking
       const userAgent = window.navigator.userAgent;
 
-      // Call the sign in service
-      const result = await authService.signIn({
-        email: data.email,
-        password: data.password,
+      // Call the server action
+      const result = await signIn({
+        email,
+        password,
         userAgent,
-        ipAddress: "client-side",
       });
 
-      // Store the session ID in a cookie
-      document.cookie = `session_id=${result.session.id}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
+      if (result.error) {
+        // Field validation errors
+        if (result.fieldErrors) {
+          setFormErrors(result.fieldErrors);
+        } else {
+          // General error
+          setError(result.error);
+        }
+        return;
+      }
 
-      // Store the auth token (you might want to use a more secure approach like httpOnly cookies)
-      localStorage.setItem("auth_token", result.token || "");
-
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // Redirect to beranda on success
+      router.push("/beranda");
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Gagal masuk. Silakan coba lagi.",
@@ -85,7 +80,7 @@ export default function SignInPage() {
             </div>
           )}
 
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form action={handleSubmit} className="space-y-4">
             <div>
               <label
                 htmlFor="email"
@@ -96,17 +91,15 @@ export default function SignInPage() {
               <div className="mt-1">
                 <input
                   id="email"
+                  name="email"
                   type="email"
                   placeholder="nama@perusahaan.com"
-                  {...form.register("email")}
                   disabled={isLoading}
                   className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 />
               </div>
-              {form.formState.errors.email && (
-                <p className="mt-1 text-xs text-red-600">
-                  {form.formState.errors.email.message}
-                </p>
+              {formErrors.email && (
+                <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>
               )}
             </div>
 
@@ -120,16 +113,16 @@ export default function SignInPage() {
               <div className="mt-1">
                 <input
                   id="password"
+                  name="password"
                   type="password"
                   placeholder="••••••••"
-                  {...form.register("password")}
                   disabled={isLoading}
                   className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 />
               </div>
-              {form.formState.errors.password && (
+              {formErrors.password && (
                 <p className="mt-1 text-xs text-red-600">
-                  {form.formState.errors.password.message}
+                  {formErrors.password}
                 </p>
               )}
             </div>
